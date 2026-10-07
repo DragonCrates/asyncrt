@@ -37,8 +37,9 @@ impl Reactor {
     }
 
     pub fn poll(&self) {
-        self.poller.poll(&self.registrations);
         self.pending_wakeup.store(false, Relaxed);
+        self.poller.poll(&self.registrations);
+        self.pending_wakeup.store(true, Relaxed);
     }
 
     /// Sends a wakeup signal
