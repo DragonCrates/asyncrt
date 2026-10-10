@@ -12,8 +12,8 @@ use dstd::sync::{Arc, Weak, Mutex, Condvar};
 
 use super::Runtime;
 
-pub struct Task<F, T> {
-    fut: Mutex<Pin<Box<F>>>,
+pub struct Task<T> {
+    fut: Mutex<Pin<Box<dyn Future<Output = T> + Send>>>,
     ret: Mutex<Option<T>>,
     ret_waker: Mutex<Waker>,
     ret_cond: Condvar,
@@ -21,8 +21,11 @@ pub struct Task<F, T> {
     runtime: Weak<Runtime>
 }
 
-impl<F, T> Task<F, T> {
-    pub(crate) fn new(fut: F, runtime: &Arc<Runtime>) -> Arc<Task<F, T>> {
+impl<T> Task<T> {
+    pub(crate) fn new<F>(fut: F, runtime: &Arc<Runtime>) -> Arc<Task<T>>
+    where
+        F: Future<Output = T> + Send + 'static
+    {
         let task = Task {
             fut: Mutex::new(Box::pin(fut)),
             ret: Mutex::new(None),
@@ -35,11 +38,7 @@ impl<F, T> Task<F, T> {
     }
 }
 
-impl<F, T> Wake for Task<F, T>
-where
-    F: Future<Output = T> + Send + 'static,
-    T: Send + 'static,
-{
+impl<T: Send + 'static> Wake for Task<T> {
     fn wake(self: Arc<Self>) {
         if self.pending_wakeup.load(Relaxed) { return; }
         self.pending_wakeup.store(true, Relaxed);
@@ -50,11 +49,7 @@ where
     }
 }
 
-impl<F, T> TaskTrait for Task<F, T>
-where
-    F: Future<Output = T> + Send + 'static,
-    T: Send + 'static,
-{
+impl<T: Send + 'static> TaskTrait for Task<T> {
     fn drive(self: Arc<Self>) {
         self.pending_wakeup.store(false, Relaxed);
         let waker = Waker::from(Arc::clone(&self));
@@ -74,11 +69,11 @@ pub(crate) trait TaskTrait: Send + Sync {
 
 pub type DynTask = dyn TaskTrait;
 
-pub struct JoinHandle<F, T>(Arc<Task<F, T>>);
+pub struct JoinHandle<T>(Arc<Task<T>>);
 
-impl<F, T> JoinHandle<F, T> {
-    pub(crate) fn new(task: Arc<Task<F, T>>) -> JoinHandle<F, T> {
-        JoinHandle::<F, T>(task)
+impl<T> JoinHandle<T> {
+    pub(crate) fn new(task: Arc<Task<T>>) -> JoinHandle<T> {
+        JoinHandle(task)
     }
 
     pub fn is_finished(&self) -> bool {
@@ -96,7 +91,7 @@ impl<F, T> JoinHandle<F, T> {
     }
 }
 
-impl<F, T> Future for JoinHandle<F, T> {
+impl<T> Future for JoinHandle<T> {
     type Output = T;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
         let mut ret = self.0.ret.lock();

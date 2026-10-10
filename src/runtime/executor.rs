@@ -1,16 +1,19 @@
-use dstd::sync::{Arc, Channel};
+extern crate alloc;
+use alloc::sync::Arc;
+use alloc::collections::VecDeque;
+
+use dstd::sync::Mutex;
 
 use super::DynTask;
 
-#[derive(Default)]
 pub struct Executor {
-    queue: Channel<Arc<DynTask>>,
+    queue: MiniChannel<Arc<DynTask>>
 }
 
 impl Executor {
     pub fn new() -> Executor {
         Executor {
-            queue: Channel::new(),
+            queue: MiniChannel::new(),
         }
     }
 
@@ -22,5 +25,25 @@ impl Executor {
         while let Some(task) = self.queue.try_recv() {
             task.drive();
         }
+    }
+}
+
+struct MiniChannel<T> {
+    queue: Mutex<VecDeque<T>>
+}
+
+impl<T> MiniChannel<T> {
+    fn new() -> MiniChannel<T> {
+        MiniChannel {
+            queue: Mutex::new(VecDeque::new())
+        }
+    }
+
+    fn send(&self, item: T) {
+        self.queue.lock().push_back(item);
+    }
+
+    fn try_recv(&self) -> Option<T> {
+        self.queue.lock().pop_front()
     }
 }

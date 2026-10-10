@@ -3,15 +3,27 @@
 use dstd::init::Termination;
 use crate::runtime::{Runtime, JoinHandle, ThreadJoinHandle};
 
-pub fn main<F: Future<Output = T> + Send + 'static, T: Termination + Send + 'static>(fut: F) -> T {
+pub fn main<F, T>(fut: F) -> T
+where
+    F: Future<Output = T> + Send + 'static,
+    T: Termination + Send + 'static,
+{
     Runtime::new().block_on(fut)
 }
 
-pub fn spawn<F: Future<Output = T> + Send + 'static, T: Send + 'static>(f: F) -> JoinHandle<F, T> {
+pub fn spawn<F, T>(f: F) -> JoinHandle<T>
+where
+    F: Future<Output = T> + Send + 'static,
+    T: Send + 'static,
+{
     Runtime::get().spawn(f)
 }
 
-pub fn spawn_blocking<F: FnOnce() -> T + Send + 'static, T: Send + 'static>(f: F) -> ThreadJoinHandle<F, T> {
+pub fn spawn_blocking<F, T>(f: F) -> ThreadJoinHandle<T>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
     Runtime::get().spawn_blocking(f)
 }
 

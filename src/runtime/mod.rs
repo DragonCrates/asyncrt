@@ -36,7 +36,11 @@ impl Runtime {
         Arc::clone(&self.reactor)
     }
 
-    pub fn block_on<F: Future<Output = T> + Send + 'static, T: Send + 'static>(self: &Arc<Self>, fut: F) -> T {
+    pub fn block_on<F, T>(self: &Arc<Self>, fut: F) -> T
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
         let _guard = self.enter();
 
         let task = self.spawn(fut);
@@ -53,7 +57,11 @@ impl Runtime {
         self.executor.schedule(task);
     }
 
-    pub fn spawn<F: Future<Output = T> + Send + 'static, T: Send + 'static>(self: &Arc<Self>, fut: F) -> JoinHandle<F, T> {
+    pub fn spawn<F, T>(self: &Arc<Self>, fut: F) -> JoinHandle<T>
+    where
+        F: Future<Output = T> + Send + 'static,
+        T: Send + 'static,
+    {
         let task = Task::new(fut, self);
         let task_clone = Arc::clone(&task);
         let dyn_task = task as Arc<DynTask>;
@@ -61,7 +69,11 @@ impl Runtime {
         JoinHandle::new(task_clone)
     }
 
-    pub fn spawn_blocking<F: FnOnce() -> T + Send + 'static, T: Send + 'static>(&self, f: F) -> ThreadJoinHandle<F, T> {
+    pub fn spawn_blocking<F, T>(&self, f: F) -> ThreadJoinHandle<T>
+    where
+        F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
+    {
         self.thread_pool.spawn(f)
     }
 

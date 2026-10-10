@@ -24,7 +24,11 @@ impl ThreadPool {
         }
     }
 
-    pub fn spawn<F: FnOnce() -> T + Send + 'static, T: Send + 'static>(&self, f: F) -> ThreadJoinHandle<F, T> {
+    pub fn spawn<F, T>(&self, f: F) -> ThreadJoinHandle<T>
+    where
+        F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
+    {
         let task = Arc::new(ThreadTask::new(f));
         let task_clone = Arc::clone(&task);
         if self.nworkers.load(Relaxed) == 0 {
@@ -48,37 +52,6 @@ impl ThreadPool {
                 task.run();
             }
         });
-    }
-}
-
-pub struct ThreadJoinHandle<F, T>(Arc<ThreadTask<F, T>>);
-
-impl<F, T> ThreadJoinHandle<F, T> {
-    pub fn is_finished(&self) -> bool {
-        self.0.ret.lock().is_some()
-    }
-
-    pub fn join_blocking(self) -> T {
-        let mut ret = self.0.ret.lock();
-        loop {
-            if let Some(ret) = ret.take() {
-                return ret;
-            }
-            ret = self.0.ret_cond.wait(ret);
-        }
-    }
-}
-
-impl<F, T> Future for ThreadJoinHandle<F, T> {
-    type Output = T;
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
-        let mut ret = self.0.ret.lock();
-        if let Some(ret) = ret.take() {
-            Poll::Ready(ret)
-        } else {
-            cx.waker().clone_into(&mut *self.0.ret_waker.lock());
-            Poll::Pending
-        }
     }
 }
 
@@ -117,5 +90,56 @@ where
         *self.ret.lock() = Some(ret);
         self.ret_waker.lock().wake_by_ref();
         self.ret_cond.notify_one();
+    }
+}
+
+pub struct ThreadJoinHandle<T>(Arc<dyn ThreadTaskHandle<T>>);
+
+impl<T> ThreadJoinHandle<T> {
+    pub fn is_finished(&self) -> bool {
+        self.0.is_finished()
+    }
+
+    pub fn join_blocking(self) -> T {
+        self.0.join_blocking()
+    }
+}
+
+impl<T> Future for ThreadJoinHandle<T> {
+    type Output = T;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<T> {
+        self.0.poll(cx)
+    }
+}
+
+trait ThreadTaskHandle<T>: Send + Sync {
+    fn is_finished(&self) -> bool;
+    fn join_blocking(&self) -> T;
+    fn poll(&self, cx: &mut Context<'_>) -> Poll<T>;
+}
+
+impl<F: Send, T: Send> ThreadTaskHandle<T> for ThreadTask<F, T> {
+    fn is_finished(&self) -> bool {
+        self.ret.lock().is_some()
+    }
+
+    fn join_blocking(&self) -> T {
+        let mut ret = self.ret.lock();
+        loop {
+            if let Some(ret) = ret.take() {
+                return ret;
+            }
+            ret = self.ret_cond.wait(ret);
+        }
+    }
+
+    fn poll(&self, cx: &mut Context<'_>) -> Poll<T> {
+        let mut ret = self.ret.lock();
+        if let Some(ret) = ret.take() {
+            Poll::Ready(ret)
+        } else {
+            cx.waker().clone_into(&mut *self.ret_waker.lock());
+            Poll::Pending
+        }
     }
 }
