@@ -3,6 +3,7 @@ use core::ffi::{c_int, c_uint, c_void};
 
 use dstd::io::{Error, ErrorKind};
 use dstd::sync::Mutex;
+use dstd::time::Instant;
 
 use crate::io::Interest;
 use super::Registrations;
@@ -61,9 +62,14 @@ impl Epoll {
         Epoll { epfd, eventfd }
     }
 
-    pub fn poll(&self, registrations: &Mutex<Registrations>) {
+    pub fn poll(&self, registrations: &Mutex<Registrations>, deadline: Option<Instant>) {
         let mut events = [epoll_event::default(); 2048];
-        let ret = unsafe { epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as c_int, -1) };
+        let timeout = match deadline {
+            Some(d) => (d - Instant::now()).as_millis() as i32,
+            None => -1,
+        };
+
+        let ret = unsafe { epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as c_int, timeout) };
         if ret == -1 {
             let err = Error::last_os_error();
             if err.kind() != ErrorKind::Interrupted {

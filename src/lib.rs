@@ -29,13 +29,12 @@ macro_rules! main {
 }
 
 // TODO list:
-// - spawn_blocking
-// - timers
 // - sync primitives
 pub mod io;
 pub mod net;
 pub mod reactor;
 pub mod runtime;
+pub mod time;
 
 /// Defines a block that can be configured-out entirely
 macro_rules! block {
