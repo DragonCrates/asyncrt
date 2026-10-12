@@ -29,12 +29,15 @@ impl<T: AsyncRead> AsyncReadExt for T {
     }
 }
 
-#[must_use = "futures do nothing unless you `.await` or poll them"]
-#[derive(Debug)]
-pub struct Read<'a, T: ?Sized> {
-    io: &'a mut T,
-    buf: &'a mut [u8],
+mod read {
+    #[must_use = "futures do nothing unless you `.await` or poll them"]
+    #[derive(Debug)]
+    pub struct Read<'a, T: ?Sized> {
+        pub(crate) io: &'a mut T,
+        pub(crate) buf: &'a mut [u8],
+    }
 }
+use read::Read;
 
 impl<T: AsyncRead + Unpin> Future for Read<'_, T> {
     type Output = Result<usize>;
@@ -64,12 +67,15 @@ impl<T: AsyncWrite> AsyncWriteExt for T {
     }
 }
 
-#[must_use = "futures do nothing unless you `.await` or poll them"]
-#[derive(Debug)]
-pub struct Write<'a, T: ?Sized> {
-    io: &'a mut T,
-    buf: &'a [u8],
+mod write {
+    #[must_use = "futures do nothing unless you `.await` or poll them"]
+    #[derive(Debug)]
+    pub struct Write<'a, T: ?Sized> {
+        pub(crate) io: &'a mut T,
+        pub(crate) buf: &'a [u8],
+    }
 }
+use write::Write;
 
 impl<T: AsyncWrite + Unpin> Future for Write<'_, T> {
     type Output = Result<usize>;
