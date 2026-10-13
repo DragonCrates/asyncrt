@@ -62,7 +62,8 @@ impl Epoll {
         Epoll { epfd, eventfd }
     }
 
-    pub fn poll(&self, registrations: &Mutex<Registrations>, deadline: Option<Instant>) {
+    // Return value - `true` if was interrupted by a signal
+    pub fn poll(&self, registrations: &Mutex<Registrations>, deadline: Option<Instant>) -> bool {
         let mut events = [epoll_event::default(); 2048];
         let timeout = match deadline {
             Some(d) => (d - Instant::now()).as_millis() as i32,
@@ -76,10 +77,10 @@ impl Epoll {
                 panic!("epoll_wait failed: {err}");
             }
             // Interrupted - nothing to do
-            return;
+            return true;
         }
 
-        if ret == 0 { return; }
+        if ret == 0 { return false; }
 
         let registrations = registrations.lock();
         for event in &events[..ret as usize] {
@@ -99,6 +100,8 @@ impl Epoll {
                 }
             }
         }
+
+        false
     }
 
     pub fn register(&self, fd: c_int) {

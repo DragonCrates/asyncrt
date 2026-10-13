@@ -13,6 +13,7 @@ use dstd::time::Instant;
 
 use crate::runtime::Runtime;
 use crate::io::Interest;
+use crate::signal::handle_ctrlc_wakers;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 crate::block! {
@@ -50,7 +51,9 @@ impl Reactor {
         let closest_deadline = self.deadlines.lock().peek().map(|d| d.deadline);
 
         self.pending_wakeup.store(false, Relaxed);
-        self.poller.poll(&self.registrations, closest_deadline);
+        if self.poller.poll(&self.registrations, closest_deadline) {
+            handle_ctrlc_wakers();
+        }
         self.pending_wakeup.store(true, Relaxed);
 
         // Empty expired deadlines
