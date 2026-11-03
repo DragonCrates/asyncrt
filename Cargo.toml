@@ -12,6 +12,7 @@ keywords = ["no_std", "async"]
 
 [dependencies]
 dstd = { path = "../dstd" }
+pin-project-lite = "0.2"
 
 [profile.dev]
 panic = "abort"
