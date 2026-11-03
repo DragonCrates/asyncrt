@@ -51,7 +51,7 @@ impl Epoll {
             panic!("eventfd create failed: {}", Error::last_os_error());
         }
 
-        let mut event = epoll_event::default();
+        let mut event = epoll_event::new();
         event.events = EPOLLIN | EPOLLET;
         event.data.fd = eventfd;
         let ret = unsafe { epoll_ctl(epfd, EPOLL_CTL_ADD, eventfd, &mut event) };
@@ -63,8 +63,9 @@ impl Epoll {
     }
 
     // Return value - `true` if was interrupted by a signal
+    #[allow(clippy::collapsible_if)]
     pub fn poll(&self, registrations: &Mutex<Registrations>, deadline: Option<Instant>) -> bool {
-        let mut events = [epoll_event::default(); 2048];
+        let mut events = [epoll_event::new(); 2048];
         let timeout = match deadline {
             Some(d) => (d - Instant::now()).as_millis() as i32,
             None => -1,
@@ -105,7 +106,7 @@ impl Epoll {
     }
 
     pub fn register(&self, fd: c_int) {
-        let mut event = epoll_event::default();
+        let mut event = epoll_event::new();
         event.events = EPOLLIN | EPOLLOUT | EPOLLET;
         event.data.fd = fd;
         let ret = unsafe { epoll_ctl(self.epfd, EPOLL_CTL_ADD, fd, &mut event) };
@@ -147,8 +148,8 @@ struct epoll_event {
     data: epoll_data,
 }
 
-impl Default for epoll_event {
-    fn default() -> epoll_event {
+impl epoll_event {
+    fn new() -> epoll_event {
         epoll_event {
             events: 0,
             data: epoll_data {

@@ -59,6 +59,6 @@ impl Drop for EnterGuard {
             }
             *runtime_cell.runtime.borrow_mut() = self.prev.take();
             runtime_cell.depth.set(self.depth - 1);
-        })
+        });
     }
 }

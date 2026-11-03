@@ -32,6 +32,7 @@ pub struct Reactor {
 
 impl Reactor {
     /// Creates a new reactor
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Reactor {
         Reactor {
             poller: Poller::new(),
