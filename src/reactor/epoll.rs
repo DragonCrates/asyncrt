@@ -62,9 +62,8 @@ impl Epoll {
         Epoll { epfd, eventfd }
     }
 
-    // Return value - `true` if was interrupted by a signal
     #[allow(clippy::collapsible_if)]
-    pub fn poll(&self, registrations: &Mutex<Registrations>, deadline: Option<Instant>) -> bool {
+    pub fn poll(&self, registrations: &Mutex<Registrations>, deadline: Option<Instant>) {
         let mut events = [epoll_event::new(); 2048];
         let timeout = match deadline {
             Some(d) => (d - Instant::now()).as_millis() as i32,
@@ -78,10 +77,12 @@ impl Epoll {
                 panic!("epoll_wait failed: {err}");
             }
             // Interrupted - nothing to do
-            return true;
+            return;
         }
 
-        if ret == 0 { return false; }
+        // If epoll returned no events, return without locking registrations
+        // Epoll returns without events when timeout expires
+        if ret == 0 { return; }
 
         let registrations = registrations.lock();
         for event in &events[..ret as usize] {
@@ -101,8 +102,6 @@ impl Epoll {
                 }
             }
         }
-
-        false
     }
 
     pub fn register(&self, fd: c_int) {

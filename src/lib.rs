@@ -46,7 +46,6 @@ pub mod io;
 pub mod net;
 pub mod reactor;
 pub mod runtime;
-pub mod signal;
 pub mod time;
 
 /// Defines a block that can be configured-out entirely

@@ -13,7 +13,6 @@ use dstd::time::Instant;
 
 use crate::runtime::Runtime;
 use crate::io::Interest;
-use crate::signal::handle_ctrlc_wakers;
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
 crate::block! {
@@ -52,9 +51,7 @@ impl Reactor {
         let closest_deadline = self.deadlines.lock().peek().map(|d| d.deadline);
 
         self.pending_wakeup.store(false, Relaxed);
-        if self.poller.poll(&self.registrations, closest_deadline) {
-            handle_ctrlc_wakers();
-        }
+        self.poller.poll(&self.registrations, closest_deadline);
         self.pending_wakeup.store(true, Relaxed);
 
         // Empty expired deadlines
@@ -80,7 +77,7 @@ impl Reactor {
         self.registrations.lock().insert(fd, (interest, waker.clone()));
     }
 
-    /// Removes a file descriptor. You should call this every time a fd is dropped, otherwise resources would be leaked
+    /// Removes a file descriptor. You should call this every time a fd is dropped, otherwise resources could be leaked
     pub fn deregister(&self, fd: RawSocket) {
         self.poller.deregister(fd);
         self.registrations.lock().remove(&fd);
