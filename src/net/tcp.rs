@@ -17,6 +17,7 @@ impl TcpListener {
     // TODO: ToSocketAddrs
     pub fn bind(addr: SocketAddr) -> Result<TcpListener> {
         let sock = net::TcpSocket::new_nonblock(addr)?;
+        sock.set_reuseaddr(true)?;
         sock.bind(addr)?;
         let inner = sock.listen()?;
         let this = TcpListener { inner };
@@ -38,6 +39,11 @@ impl TcpListener {
                 }
             }
         }
+    }
+
+    pub fn from_std(listener: net::TcpListener) -> TcpListener {
+        Reactor::get().register(listener.as_raw_socket());
+        TcpListener { inner: listener }
     }
 }
 
@@ -66,7 +72,7 @@ pub struct TcpStream {
     inner: net::TcpStream,
 }
 
-// TODO read, write
+// TODO readable, writable, from_std
 
 impl TcpStream {
     fn accepted(inner: net::TcpStream) -> TcpStream {

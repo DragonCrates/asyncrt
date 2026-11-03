@@ -12,6 +12,7 @@ pub use tcp::{TcpListener, TcpStream};
 /// This future rearms fd in reactor once and then returns
 ///
 /// Because it returns unconditionally, it should never be used without a saved state (like in `ready!` macro
+// TODO: convert to OneShot
 struct WouldBlock {
     fd: RawSocket,
     fired: bool,
