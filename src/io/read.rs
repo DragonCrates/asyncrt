@@ -1,6 +1,9 @@
 use core::task::{ready, Poll, Context};
 use core::pin::Pin;
 
+extern crate alloc;
+use alloc::vec::Vec;
+
 use dstd::io::Result;
 
 use pin_project_lite::pin_project;
@@ -19,13 +22,17 @@ impl<T: AsyncRead + Unpin + ?Sized> AsyncRead for &mut T {
 
 pub trait AsyncReadExt {
     fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Read<'a, Self>;
-    // TODO: read_to_end
+    fn read_to_end<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadToEnd<'a, Self>;
     fn take(self, limit: u64) -> Take<Self> where Self: Sized;
 }
 
 impl<T: AsyncRead> AsyncReadExt for T {
     fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> Read<'a, Self> {
         Read { io: self, buf }
+    }
+
+    fn read_to_end<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadToEnd<'a, Self> {
+        ReadToEnd::new(self, buf)
     }
 
     fn take(self, limit: u64) -> Take<Self> {
@@ -44,11 +51,57 @@ mod read {
 }
 use read::Read;
 
-impl<T: AsyncRead + Unpin> Future for Read<'_, T> {
+impl<T: AsyncRead + Unpin + ?Sized> Future for Read<'_, T> {
     type Output = Result<usize>;
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<usize>> {
         let this = Pin::into_inner(self);
         Pin::new(&mut this.io).poll_read(cx, this.buf)
+    }
+}
+
+mod read_to_end {
+    use super::Vec;
+
+    #[must_use = "futures do nothing unless you `.await` or poll them"]
+    #[derive(Debug)]
+    pub struct ReadToEnd<'a, T: ?Sized> {
+        pub(crate) io: &'a mut T,
+        pub(crate) buf: &'a mut Vec<u8>,
+        pub(crate) init: usize,
+    }
+}
+use read_to_end::ReadToEnd;
+
+impl<'a, T> ReadToEnd<'a, T> {
+    fn new(io: &'a mut T, buf: &'a mut Vec<u8>) -> ReadToEnd<'a, T> {
+        let init = buf.len();
+        ReadToEnd { io, buf, init }
+    }
+}
+
+impl<T: AsyncRead + Unpin + ?Sized> Future for ReadToEnd<'_, T> {
+    type Output = Result<()>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<()>> {
+        let this = Pin::into_inner(self);
+
+        if this.buf.capacity() < 128 { this.buf.reserve(128 - this.buf.len()); }
+        this.buf.resize(this.buf.capacity(), 0);
+
+        loop {
+            if this.init + this.buf.len()/8 >= this.buf.len() {
+                this.buf.resize(this.buf.capacity()*2, 0);
+            }
+
+            let nr = ready!(Pin::new(&mut this.io).poll_read(cx, &mut this.buf[this.init..]))?;
+            if nr == 0 { return Poll::Ready(Ok(())); }
+            this.init += nr;
+        }
+    }
+}
+
+impl<T: ?Sized> Drop for ReadToEnd<'_, T> {
+    fn drop(&mut self) {
+        self.buf.truncate(self.init);
     }
 }
 
@@ -76,7 +129,7 @@ impl<T: AsyncRead> AsyncRead for Take<T> {
         if self.limit == 0 { return Poll::Ready(Ok(0)); }
 
         let this = self.project();
-        let limit = u64_to_usize(*this.limit);
+        let limit = u64_to_usize(*this.limit).min(buf.len());
         let nr = ready!(this.io.poll_read(cx, &mut buf[..limit]))?;
         *this.limit -= nr as u64;
         Poll::Ready(Ok(nr))
